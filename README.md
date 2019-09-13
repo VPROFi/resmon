@@ -71,7 +71,7 @@ return res;
 #define MON_MAXIMUM_SYNCHRONIZATION_OBJECT_USAGE (180-1)  // 180
 #define MON_DEFAULT_RES_MONITORING_INTERVAL 5000          // 5 sec
 ```
-2 параметра `MON_DEFAULT_RES_MONITORING_INTERVAL` и `MON_MAXIMUM_CPU_USAGE` тесно связаны, грамотным будет требование, например, программа не должны загружать cpu на более чем 30% в течение 5 мин. Меньшее чем 5 мин время в MON_DEFAULT_RES_MONITORING_INTERVAL большого смысла не имеет - пиково на 1-2-5 сек вполне можно грузить cpu, а вот если в течение 5 мин постоянная загрузка cpu будет - на такой машине все ползать будет. В большинстве реальных случаев лучше выбирать MON_DEFAULT_RES_MONITORING_INTERVAL около 5 мин, а не 5 сек.
+2 параметра `MON_DEFAULT_RES_MONITORING_INTERVAL` и `MON_MAXIMUM_CPU_USAGE` тесно связаны, грамотным будет требование, например, программа не должна загружать cpu на более чем 30% в течение 5 мин. Меньшее чем 5 мин время в MON_DEFAULT_RES_MONITORING_INTERVAL большого смысла не имеет - пиково на 1-2-5 сек вполне можно грузить cpu, а вот если в течение 5 мин постоянная загрузка cpu будет - на такой машине все ползать будет. В большинстве реальных случаев лучше выбирать MON_DEFAULT_RES_MONITORING_INTERVAL около 5 мин, а не 5 сек.
 
 ## Пример
 
