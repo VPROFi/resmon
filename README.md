@@ -58,3 +58,9 @@ return res;
 }
 ```
 при завершении работы приложения в логи попадает статистика ликов.
+
+## Пример
+
+В качестве примера в файле `\tests\kernelmode\main.c` закоментируем `ZwClose(eventHandleZw);`, в дибажной сборке на assert'е найдем где хендл открывали по сохранненому `returnAddress 0xFFFFF8004F4231F5`:
+
+![glTF model viewer](docs/resmontestleak.png)
