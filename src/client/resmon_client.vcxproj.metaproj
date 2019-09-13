@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <MSBuildFrameworkToolsRoot>C:\Windows\Microsoft.NET\Framework\</MSBuildFrameworkToolsRoot>
+    <FrameworkSDKRoot />
+    <MSBuildFrameworkToolsPath>C:\Windows\Microsoft.NET\Framework\v4.0.30319\</MSBuildFrameworkToolsPath>
+    <MSBuildFrameworkToolsPath64>C:\Windows\Microsoft.NET\Framework64\v4.0.30319\</MSBuildFrameworkToolsPath64>
+    <MSBuildFrameworkToolsPath32>C:\Windows\Microsoft.NET\Framework\v4.0.30319\</MSBuildFrameworkToolsPath32>
+    <SDK35ToolsPath />
+    <SDK40ToolsPath />
+    <WindowsSDK80Path />
+    <VCTargetsPath14>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V140\</VCTargetsPath14>
+    <VCTargetsPath12>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V120\</VCTargetsPath12>
+    <VCTargetsPath11>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V110\</VCTargetsPath11>
+    <VCTargetsPath10>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\</VCTargetsPath10>
+    <AndroidTargetsPath>C:\dev\vs\14.2\MSBuild\Microsoft\MDD\Android\V150\</AndroidTargetsPath>
+    <iOSTargetsPath>C:\dev\vs\14.2\MSBuild\Microsoft\MDD\iOS\V150\</iOSTargetsPath>
+    <VisualStudioVersion>16.0</VisualStudioVersion>
+    <AspNetConfiguration>Release</AspNetConfiguration>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <MSBuildAllProjects>C:\dev\data\resmon\resmon.sln.metaproj</MSBuildAllProjects>
+  </PropertyGroup>
+  <ItemDefinitionGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\dev\data\resmon\libs/modedep/umode/umode.vcxproj">
+      <ToolsVersion>
+      </ToolsVersion>
+      <SkipNonexistentProjects>False</SkipNonexistentProjects>
+      <AdditionalProperties>Configuration=Release; Platform=x64</AdditionalProperties>
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectReference>
+    <ProjectReference Include="C:\dev\data\resmon\libs/resmon/resmon.vcxproj">
+      <ToolsVersion>
+      </ToolsVersion>
+      <SkipNonexistentProjects>False</SkipNonexistentProjects>
+      <AdditionalProperties>Configuration=Release; Platform=x64</AdditionalProperties>
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectReference>
+  </ItemGroup>
+  <Target Name="Clean">
+    <MSBuild Projects="@(ProjectReference-&gt;Reverse())" Targets="Clean" BuildInParallel="True" Properties="BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" SkipNonexistentProjects="%(ProjectReference.SkipNonexistentProjects)" />
+    <MSBuild Projects="C:\dev\data\resmon\src/client/resmon_client.vcxproj" Targets="Clean" BuildInParallel="True" ToolsVersion="$(ProjectToolsVersion)" Properties="Configuration=Release; Platform=x64;BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" />
+  </Target>
+  <Target Name="Build" Outputs="@(resmon_clientBuildOutput)">
+    <MSBuild Projects="@(ProjectReference)" BuildInParallel="True" Properties="BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" SkipNonexistentProjects="%(ProjectReference.SkipNonexistentProjects)" />
+    <MSBuild Projects="C:\dev\data\resmon\src/client/resmon_client.vcxproj" BuildInParallel="True" ToolsVersion="$(ProjectToolsVersion)" Properties="Configuration=Release; Platform=x64;BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)">
+      <Output TaskParameter="TargetOutputs" ItemName="resmon_clientBuildOutput" />
+    </MSBuild>
+  </Target>
+  <Target Name="Rebuild" Outputs="@(resmon_clientBuildOutput)">
+    <MSBuild Projects="@(ProjectReference)" Targets="Rebuild" BuildInParallel="True" Properties="BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" SkipNonexistentProjects="%(ProjectReference.SkipNonexistentProjects)" />
+    <MSBuild Projects="C:\dev\data\resmon\src/client/resmon_client.vcxproj" Targets="Rebuild" BuildInParallel="True" ToolsVersion="$(ProjectToolsVersion)" Properties="Configuration=Release; Platform=x64;BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)">
+      <Output TaskParameter="TargetOutputs" ItemName="resmon_clientBuildOutput" />
+    </MSBuild>
+  </Target>
+  <Target Name="Publish">
+    <MSBuild Projects="@(ProjectReference)" Targets="Publish" BuildInParallel="True" Properties="BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" SkipNonexistentProjects="%(ProjectReference.SkipNonexistentProjects)" />
+    <MSBuild Projects="C:\dev\data\resmon\src/client/resmon_client.vcxproj" Targets="Publish" BuildInParallel="True" ToolsVersion="$(ProjectToolsVersion)" Properties="Configuration=Release; Platform=x64;BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" />
+  </Target>
+</Project>

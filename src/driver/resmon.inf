@@ -1,0 +1,57 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%ManufacturerName%
+DriverVer=
+CatalogFile = %DriverName%.cat
+
+[ControlFlags]
+ExcludeFromSelect=*
+
+[DestinationDirs]
+DefaultDestDir          = 12
+SourceDisksFiles        = 12            ;%windir%\system32\drivers
+
+[DefaultInstall.NT$ARCH$]
+OptionDesc          = %ServiceDescription%
+CopyFiles           = Driver.CopyFiles
+
+[DefaultInstall.NT$ARCH$.Services]
+AddService= %ServiceName%,2,DService
+
+[DefaultUninstall.NT$ARCH$]
+LegacyUninstall=1
+DelFiles   = Driver.DeleteFiles
+
+[DefaultUninstall.NT$ARCH$.Services]
+DelService = %ServiceName%,0x200      ;Ensure service is stopped before deleting
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+resmon_driver.sys = 1,,
+
+[Driver.CopyFiles]
+%DriverName%.sys
+
+[Driver.DeleteFiles]
+%DriverName%.sys
+
+[DService]
+DisplayName      = %ServiceName%
+Description      = %ServiceDescription%
+ServiceBinary    = %12%\%DriverName%.sys        ;%windir%\system32\drivers\
+ServiceType      = 1                            ;SERVICE_KERNEL_DRIVER
+StartType        = 3                            ;SERVICE_DEMAND_START
+ErrorControl     = 1                            ;SERVICE_ERROR_NORMAL
+LoadOrderGroup = Extended Base
+
+[Strings]
+ManufacturerName="resmon driver"
+ClassName=""
+DiskName="resmon Source Disk"
+DriverName="resmon_driver"
+ServiceDescription      = "resmon driver"
+ServiceName             = "resmon"
