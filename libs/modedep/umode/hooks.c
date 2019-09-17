@@ -913,15 +913,15 @@ extern Method * GetMonitorMethods(__out_opt unsigned long * totalMethods)
 		{0, 0, "OpenMutexW",        OpenMutexWHook},
 		{0, 0, "ExitProcess",       ExitProcessHook},
 		{0, 0, "TerminateProcess",  TerminateProcessHook},
-		{0, 0, "exit",				exitHook},
-		{0, 0, "_exit",				_exitHook},
-		{0, 0, "_amsg_exit",		_amsg_exitHook},
-		{0, 0, "_c_exit",		    _c_exitHook},
-		{0, 0, "_cexit",		    _cexitHook},
-		{0, 0, "malloc",		    mallocHook},
-		{0, 0, "free",		    	freeHook},
-		{0, 0, "realloc",		    reallocHook},
-		{0, 0, "calloc",		    callocHook}};
+		{0, 0, "exit",		    exitHook},
+		{0, 0, "_exit",		    _exitHook},
+		{0, 0, "_amsg_exit",	    _amsg_exitHook},
+		{0, 0, "_c_exit",	    _c_exitHook},
+		{0, 0, "_cexit",	    _cexitHook},
+		{0, 0, "malloc",	    mallocHook},
+		{0, 0, "free",		    freeHook},
+		{0, 0, "realloc",	    reallocHook},
+		{0, 0, "calloc",	    callocHook}};
 
 	if( totalMethods ) {
 		if( !init ) {
