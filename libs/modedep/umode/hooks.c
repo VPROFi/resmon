@@ -4,6 +4,7 @@
 #include <common/dbglog.h>
 #include <common/checkptr.h>
 #include <modedep/osdep.h>
+#include <resmon/resmonlib.h>
 #include <tchar.h>
 //------------------------------------------------------------------------------
 // HookApiIndex enum
@@ -33,6 +34,18 @@ typedef enum {
 	iCreateMutexW,
 	iOpenMutexA,
 	iOpenMutexW,
+	iExitProcess,
+	iTerminateProcess,
+	iMaxKernel32,
+	iexit = iMaxKernel32,
+	i_exit,
+	i_amsg_exit,
+	i_c_exit,
+	i_cexit,
+	imalloc,
+	ifree,
+	irealloc,
+	icalloc,
 	iMax
 } HookApiIndex;
 
@@ -40,6 +53,8 @@ typedef enum {
 typedef enum {
 	HeapMemType = 0x1000,
 	VirtualMemType,
+	CallocMemType,
+	MallocMemType,
 	LastMemType
 } MemoryType;
 
@@ -54,6 +69,10 @@ extern const char * GetMemoryTypeName(unsigned long mtype)
 			return (const char *)"Heap";
 		case VirtualMemType:
 			return (const char *)"Virtual";
+		case CallocMemType:
+			return (const char *)"Calloc";
+		case MallocMemType:
+			return (const char *)"Malloc";
 	}
 	return (const char *)"Unknown";
 }
@@ -138,17 +157,16 @@ static HANDLE WINAPI CreateThreadHook(
 									dwCreationFlags,
 									&threadId);
 
-	if( UPTR(ctx) && threadHandle ) {
-		if( UPTR(lpThreadId) ) {
-			__try {
-				*lpThreadId = threadId;
-			} __except(EXCEPTION_EXECUTE_HANDLER) {
-				LOG_ERROR("lpThreadId parametr error");
-			}
+	if( threadHandle && UPTR(lpThreadId) ) {
+		__try {
+			*lpThreadId = threadId;
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			LOG_ERROR("lpThreadId parametr error");
 		}
 	}
 
-	MonCreateThreadEnd(	ctx,
+	if( UPTR(ctx) )
+		MonCreateThreadEnd(	ctx,
 						threadHandle,
 						_ReturnAddress(),
 						lpStartAddress,
@@ -207,7 +225,8 @@ static HANDLE WINAPI CreateOpenSyncCommon(
 						m[index].osapi)(dwDesiredAccess,
 									bInheritHandle,
 									lpName);
-	MonCreateSyncEnd(
+	if( UPTR(ctx) )
+		MonCreateSyncEnd(
 					ctx,
 					handle,
 					syncType,
@@ -305,7 +324,6 @@ static LPVOID WINAPI HeapReAllocHook(
 	if( ptr )
 		MonAlloc(ptr, _ReturnAddress(), dwBytes, (ptr_t)hHeap, HeapMemType);
 	return ptr;
-
 }
 
 //------------------------------------------------------------------------------
@@ -361,7 +379,7 @@ static void * VirtualAllocCommon(
 			break;
 	}
 
-	if(ptr)
+	if( ptr )
 		MonAlloc(ptr,
 			returnAddress,
 			dwSize,
@@ -518,29 +536,20 @@ static HANDLE WINAPI OpenThreadHook(
 {
 	Method * m = GetMonitorMethods(0);
 	void * ctx = MonCreateThreadBegin();
-	SYSTEM_THREAD_INFORMATION sti = {0};
+	void * start = 0;
 	HANDLE threadHandle = ((HANDLE (WINAPI *)(DWORD,BOOL,DWORD)) \
 			m[iOpenThread].osapi)(dwDesiredAccess,
 									bInheritHandle,
 									dwThreadId);
-	if( threadHandle ) {
-		long status = NtQueryInformationThread(
-							threadHandle,
-							ThreadSystemThreadInformation,
-							&sti,
-							sizeof(sti),
-							0);
-		if( status < 0 ) {
-			LOG_ERROR("NtQueryInformationThread() error 0x%08X", status);
-		}
-	}
+	if( threadHandle && UPTR(ctx) )
+		start = OsGetThreadStartAddress(threadHandle);
 
 	if( UPTR(ctx) )
 		MonCreateThreadEnd(
 					ctx,
 					threadHandle,
 					_ReturnAddress(),
-					UPTR(sti.StartAddress) ? sti.StartAddress:_ReturnAddress(),
+					UPTR(start) ? start:_ReturnAddress(),
 					(void *)dwThreadId);
 
 	return threadHandle;
@@ -646,8 +655,9 @@ static HANDLE WINAPI CreateMutexCommon(
 		handle = ((HANDLE (WINAPI *)(LPSECURITY_ATTRIBUTES,BOOL,void *))\
 					m[index].osapi)(lpMutexAttributes,
 									bInitialOwner,
-									lpName);
-	MonCreateSyncEnd(
+										lpName);
+	if( UPTR(ctx) )
+		MonCreateSyncEnd(
 					ctx,
 					handle,
 					MutexSync,
@@ -718,6 +728,158 @@ static HANDLE WINAPI OpenMutexWHook(
 				(void *)lpName);
 
 }
+
+//------------------------------------------------------------------------------
+// ExitProcessHook
+//------------------------------------------------------------------------------
+static VOID WINAPI ExitProcessHook(__in UINT uExitCode)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("exit process [%u] %u", GetCurrentProcessId(), uExitCode);
+	UninstallResMonitoringSystem();
+	((VOID (WINAPI *)(UINT))\
+		m[iExitProcess].osapi)(uExitCode);
+}
+
+//------------------------------------------------------------------------------
+// TerminateProcess
+//------------------------------------------------------------------------------
+static BOOL WINAPI TerminateProcessHook(
+    __in HANDLE hProcess,
+    __in UINT uExitCode)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("terminame process %p [%u] current [%u] %u", \
+		hProcess, GetProcessId(hProcess), GetCurrentProcessId(), uExitCode);
+	if( GetProcessId(hProcess) == GetCurrentProcessId() )
+		UninstallResMonitoringSystem();
+	return ((BOOL (WINAPI *)(HANDLE, UINT))\
+		m[iTerminateProcess].osapi)(hProcess, uExitCode);
+}
+
+//------------------------------------------------------------------------------
+// exitHook
+//------------------------------------------------------------------------------
+static void __cdecl exitHook(_In_ int _Code)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("exit [%u] %i", GetCurrentProcessId(), _Code);
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(int))\
+		m[iexit].osapi)(_Code);
+}
+
+//------------------------------------------------------------------------------
+// _exitHook
+//------------------------------------------------------------------------------
+static void __cdecl _exitHook(_In_ int _Code)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_exit [%u] %i", GetCurrentProcessId(), _Code);
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(int))\
+		m[i_exit].osapi)(_Code);
+}
+
+//------------------------------------------------------------------------------
+// _amsg_exitHook
+//------------------------------------------------------------------------------
+static void __cdecl _amsg_exitHook(int rterrnum)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_amsg_exit [%u] %i", GetCurrentProcessId(), rterrnum);
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(int))\
+		m[i_amsg_exit].osapi)(rterrnum);
+}
+
+//------------------------------------------------------------------------------
+// _cexitHook
+//------------------------------------------------------------------------------
+static void __cdecl _cexitHook(void)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_cexit [%u]", GetCurrentProcessId());
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(void))\
+		m[i_cexit].osapi)();
+}
+
+//------------------------------------------------------------------------------
+// _c_exitHook
+//------------------------------------------------------------------------------
+static void __cdecl _c_exitHook(void)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_c_exit [%u]", GetCurrentProcessId());
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(void))\
+		m[i_c_exit].osapi)();
+}
+
+//------------------------------------------------------------------------------
+// callocHook
+//------------------------------------------------------------------------------
+static void * __cdecl callocHook(_In_ size_t _Count, _In_ size_t _Size)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[icalloc].osapi) );
+	ptr = ((void * (__cdecl *)(size_t, size_t)) \
+		m[icalloc].osapi)(_Count, _Size);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), _Count*_Size, (ptr_t)0, CallocMemType);
+	return ptr;
+
+}
+
+//------------------------------------------------------------------------------
+// mallocHook
+//------------------------------------------------------------------------------
+static void * __cdecl mallocHook(_In_ size_t _Size)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[icalloc].osapi) );
+	ptr = ((void * (__cdecl *)(size_t)) \
+		m[imalloc].osapi)(_Size);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), _Size, (ptr_t)0, MallocMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// reallocHook
+//------------------------------------------------------------------------------
+static void * __cdecl reallocHook(_In_opt_ void * _Memory, _In_ size_t _NewSize)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(_Memory);
+	ASSERT( UPTR(m[irealloc].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t)) \
+		m[irealloc].osapi)(_Memory, _NewSize);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), _NewSize, (ptr_t)0, MallocMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// freeHook
+//------------------------------------------------------------------------------
+static void __cdecl freeHook(_Inout_opt_ void * _Memory)
+{
+	Method * m = GetMonitorMethods(0);
+	MonFree(_Memory);
+	ASSERT( UPTR(m[ifree].osapi) );
+	((void (__cdecl *)(void*))m[ifree].osapi)(_Memory);
+}
+
 //------------------------------------------------------------------------------
 // GetMonitorMethods
 //------------------------------------------------------------------------------
@@ -748,12 +910,24 @@ extern Method * GetMonitorMethods(__out_opt unsigned long * totalMethods)
 		{0, 0, "CreateMutexA",      CreateMutexAHook},
 		{0, 0, "CreateMutexW",      CreateMutexWHook},
 		{0, 0, "OpenMutexA",        OpenMutexAHook},
-		{0, 0, "OpenMutexW",        OpenMutexWHook}};
+		{0, 0, "OpenMutexW",        OpenMutexWHook},
+		{0, 0, "ExitProcess",       ExitProcessHook},
+		{0, 0, "TerminateProcess",  TerminateProcessHook},
+		{0, 0, "exit",				exitHook},
+		{0, 0, "_exit",				_exitHook},
+		{0, 0, "_amsg_exit",		_amsg_exitHook},
+		{0, 0, "_c_exit",		    _c_exitHook},
+		{0, 0, "_cexit",		    _cexitHook},
+		{0, 0, "malloc",		    mallocHook},
+		{0, 0, "free",		    	freeHook},
+		{0, 0, "realloc",		    reallocHook},
+		{0, 0, "calloc",		    callocHook}};
 
 	if( totalMethods ) {
 		if( !init ) {
 			HookApiIndex index = 0;
 			HMODULE kernel32 = GetModuleHandle(_T("kernel32.dll"));
+			HMODULE msvcrt = GetModuleHandle(_T("msvcrt.dll"));
 
 			C_ASSERT( sizeof(m)/sizeof(m[0]) == iMax );
 
@@ -766,7 +940,10 @@ extern Method * GetMonitorMethods(__out_opt unsigned long * totalMethods)
 
 			C_ASSERT( sizeof(m)/sizeof(m[0]) == iMax );
 			while( index < iMax ) {
-				m[index].osapi = GetProcAddress(kernel32, m[index].apiname);
+				if( index < iMaxKernel32 )
+					m[index].osapi = GetProcAddress(kernel32, m[index].apiname);
+				else if( UPTR(msvcrt) )
+					m[index].osapi = GetProcAddress(msvcrt, m[index].apiname);
 				index++;
 			}
 			init = TRUE;

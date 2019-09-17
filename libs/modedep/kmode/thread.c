@@ -4,7 +4,7 @@
 
 #include <common/dbglog.h>
 #include <common/checkptr.h>
-#include <modedep/modedep.h>
+#include <modedep/osdep.h>
 //------------------------------------------------------------------------------
 // OsGetCurrentThreadId
 //------------------------------------------------------------------------------
@@ -83,4 +83,55 @@ extern void OsCloseThread(void * object)
 extern long OsExitThread(long status)
 {
 	return PsTerminateSystemThread(status);
+}
+
+//------------------------------------------------------------------------------
+// OsOpenCurrentThread
+//------------------------------------------------------------------------------
+extern void * OsOpenCurrentThread(void)
+{
+	return (void *)0;
+}
+
+#define ThreadSystemThreadInformation 0x28
+//------------------------------------------------------------------------------
+// OsGetThreadStartAddress
+//------------------------------------------------------------------------------
+extern void * OsGetThreadStartAddress(void * thread)
+{
+	SYSTEM_THREAD_INFORMATION sti = {0};
+	HANDLE threadHandle = 0;
+	// TODO: call without hook
+	NTSTATUS status = ObOpenObjectByPointer(
+					thread,
+					OBJ_KERNEL_HANDLE,
+					NULL,
+					THREAD_ALL_ACCESS,
+					*PsThreadType,
+					KernelMode,
+					&threadHandle);
+	if( !NT_SUCCESS(status) ) {
+		LOG_ERROR("ObOpenObjectByPointer(%p) error 0x%08X", thread, status);
+		return _ReturnAddress();
+	}
+	status = ZwQueryInformationThread(
+				threadHandle,
+				ThreadSystemThreadInformation,
+				&sti, sizeof(sti), 0);
+	ZwClose(threadHandle);
+	if( NT_SUCCESS(status) ) {
+		return sti.StartAddress;
+	} else {
+		LOG_ERROR("get ThreadSystemThreadInformation for %p error 0x%08X", \
+			thread, status);
+	}
+	return _ReturnAddress();
+}
+
+//------------------------------------------------------------------------------
+// OsGetThreadId
+//------------------------------------------------------------------------------
+extern void * OsGetThreadId(void * thread)
+{
+	return (void *)PsGetThreadId(thread);
 }

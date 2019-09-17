@@ -113,6 +113,7 @@ typedef struct {
 
 	void *              shutDownEvent;
 	void *              monitorThread;
+	void *				mainThread;
 
 	ResObjectCounters	counters;
 
@@ -625,6 +626,28 @@ extern void MonCreateThreadEnd(
 }
 
 //------------------------------------------------------------------------------
+// MonAppendMonitoringTread
+//------------------------------------------------------------------------------
+extern signed MonAppendMonitoringTread(void * thread,
+						void * returnAddress)
+{
+	RsList * rsList = AcquireResourceList(ThreadResList, TRUE);
+	if( !AvlGetResNode(rsList->avl, thread) ) {
+		MonCreateThreadEnd(
+					(void*)rsList,
+					thread,
+					returnAddress,
+					OsGetThreadStartAddress(thread),
+					OsGetThreadId(thread));
+		return TRUE;
+	} else {
+		OsReleaseResource(rsList->accessCs);
+		OsReleaseSemaphore(rsList->accessSemaphore, 1, NULL);
+	}
+	return FALSE;
+}
+
+//------------------------------------------------------------------------------
 // MonCreateSyncBegin
 //------------------------------------------------------------------------------
 extern void * MonCreateSyncBegin(void)
@@ -720,22 +743,23 @@ extern void MonClose(void * obj)
 
 	#pragma warning( suppress:4127 )
 	} while(0);
-	
+
 	if( resNode ) {
-
 		ASSERT( PTR(rsList) );
-
 		ASSERT( rsList->totalResources != 0 );
 		INTERLOCKED_DEC(&rsList->totalResources);
-
 		FreeObject(resNode);
+	}
+	
+	if( rsList )
+		OsReleaseResource(rsList->accessCs);
 
+	if( resNode ) {
+		ASSERT( PTR(rsList) );
 		ASSERT( rsList->accessSemaphore != 0 );
 		OsReleaseSemaphore(rsList->accessSemaphore, 1, NULL);
 	}
 
-	if( rsList )
-		OsReleaseResource(rsList->accessCs);
 	return;
 }
 
@@ -829,14 +853,6 @@ extern void MonUpdateTimes(
 			(((userTime + krnlTime) - \
 			(cnt->abst.KernelTime + cnt->abst.UserTime))*100) / totalTime );
 	}
-}
-
-//------------------------------------------------------------------------------
-// MonResSnapshot
-//------------------------------------------------------------------------------
-static signed MonResSnapshot(void)
-{
-	return FALSE;
 }
 
 //------------------------------------------------------------------------------
@@ -1064,8 +1080,13 @@ static void ProcessThreadLogNodes(ResThread * resThread)
 
 	RESLOG("handle(ptr) 0x%p id %u", \
 				resThread->node.key, resThread->threadId);
-	RESLOG("start address 0x%p %s", resThread->startAddress, \
-		resThread->startAddress == ResMonitorThread ? "(ResMonitorThread)":"");
+	if( resThread->startAddress == ResMonitorThread ) {
+		RESLOG("start address 0x%p (ResMonitorThread)", resThread->startAddress);
+	} else {
+		ResContext * resCtx = GetResourceContext();
+		RESLOG("start address 0x%p%s", resThread->startAddress, \
+			resCtx->mainThread == resThread->node.key ? " (MainThread)":"");
+	}
 	RESLOG("thread create time 0x%I64X", \
 		resThread->counters.abst.CreateTime );
 	RESLOG("thread exit time 0x%I64X", resThread->counters.abst.ExitTime );
@@ -1383,7 +1404,7 @@ extern signed __stdcall MonLogAllResources(void)
 	ResContext * resCtx = GetResourceContext();
 	signed notFree = FALSE;
 	if( !rsList ) {
-		LOG_ERROR("can`t acquire memory resource list");
+		//LOG_ERROR("can`t acquire memory resource list");
 		return TRUE;
 	}
 
@@ -1457,11 +1478,19 @@ extern signed __stdcall UninstallResMonitoringSystem(void)
 	ASSERT( resCtx->objInfo.type == ResContextObjectType );
 	ASSERT( resCtx->objInfo.size = sizeof(ResContext) );
 
+	if( resCtx->mainThread ) {
+		RsList * rsList = 0;
+		OsCloseThread(resCtx->mainThread);
+		MonClose(resCtx->mainThread);
+		resCtx->mainThread = 0;
+	}
+
 	if( resCtx->shutDownEvent ) {
 		OsSetEvent( resCtx->shutDownEvent );
 		if( resCtx->monitorThread ) {
 			OsWaitForSingleObject(resCtx->monitorThread, OS_INFINITE);
 			OsCloseThread(resCtx->monitorThread);
+			MonClose(resCtx->monitorThread);
 			resCtx->monitorThread = 0;
 		}
 		OsClose(resCtx->shutDownEvent);
@@ -1554,6 +1583,16 @@ extern signed __stdcall InstallResMonitoringSystem(void * base, MonLimits * limi
 		if( !resCtx->monitorThread ) {
 			LOG_ERROR("OsCreateThread(ResMonitorThread) error");
 		}
+
+		if( resCtx->monitorThread )
+			MonAppendMonitoringTread(resCtx->monitorThread,
+						#pragma warning( suppress:4054 )
+						(void *)InstallResMonitoringSystem);
+
+		resCtx->mainThread = OsOpenCurrentThread();
+		if( resCtx->mainThread )
+			MonAppendMonitoringTread(resCtx->mainThread,
+						_ReturnAddress());
 
 	#pragma warning( suppress:4127 )
 	} while(0);

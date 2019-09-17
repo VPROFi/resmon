@@ -55,7 +55,7 @@
     <ConversionToolVersion>false</ConversionToolVersion>
     <OutDirPrefix>$(SolutionDir)\build\$(Configuration)\$(Platform)\</OutDirPrefix>
     <OutDir>$(OutDirPrefix)bin\</OutDir>
-    <IntDir>$(OutDirPrefix)obj\client\</IntDir>
+    <IntDir>$(OutDirPrefix)obj\tests\usermode\</IntDir>
     <TargetVersion>Windows7</TargetVersion>
     <PlatformToolset>WindowsApplicationForDrivers10.0</PlatformToolset>
   </PropertyGroup>

@@ -51,7 +51,8 @@ void MonCreateThreadEnd(void * beginCtx,
 						void * returnAddress,
 						void * startAddress,
 						void * threadId);
-
+signed MonAppendMonitoringTread(void * thread,
+						void * returnAddress);
 // synchronization types
 typedef enum {
 	EventSync,

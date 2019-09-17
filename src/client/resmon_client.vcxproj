@@ -38,6 +38,11 @@
     <ClCompile Include="*.c" />
     <ClCompile Include="*.cpp" />
   </ItemGroup>
+
+  <ItemGroup>
+    <MASM Include="asm\$(Platform)\*.asm" />
+  </ItemGroup>
+
   <ItemGroup>
     <ClInclude Include="..\..\res\*.h" />
   </ItemGroup>

@@ -49,7 +49,7 @@
     <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
     <OutDirPrefix>$(SolutionDir)\build\$(Configuration)\$(Platform)\</OutDirPrefix>
     <OutDir>$(OutDirPrefix)bin\</OutDir>
-    <IntDir>$(OutDirPrefix)obj\driver\</IntDir>
+    <IntDir>$(OutDirPrefix)obj\tests\kernelmode\</IntDir>
     <ConfigurationType>Driver</ConfigurationType>
     <DriverTargetPlatform>Desktop</DriverTargetPlatform>
     <TargetVersion>Windows7</TargetVersion>

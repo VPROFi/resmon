@@ -90,6 +90,7 @@ void OsGetProcessPerfomance(
 // thread process api
 //------------------------------------------------------------------------------
 void * OsGetCurrentThreadId(void);
+void * OsGetThreadId(void * thread);
 void * OsGetCurrentProcessId(void);
 void * OsCreateThread(
 							void * startAddress,
@@ -98,6 +99,8 @@ void * OsCreateThread(
 							void ** threadId);
 void OsCloseThread(void * object);
 long OsExitThread(long status);
+void * OsOpenCurrentThread(void);
+void * OsGetThreadStartAddress(void * thread);
 
 unsigned long OsGetLastError( void );
 //------------------------------------------------------------------------------

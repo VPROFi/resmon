@@ -3,7 +3,7 @@
 #endif
 #include <common/dbglog.h>
 #include <common/checkptr.h>
-#include <modedep/modedep.h>
+#include <modedep/osdep.h>
 //------------------------------------------------------------------------------
 // OsGetCurrentThreadId
 //------------------------------------------------------------------------------
@@ -57,4 +57,37 @@ extern void OsCloseThread(void * object)
 extern long OsExitThread(long status)
 {
 	return status;
+}
+
+//------------------------------------------------------------------------------
+// OsOpenCurrentThread
+//------------------------------------------------------------------------------
+extern void * OsOpenCurrentThread(void)
+{
+	return OpenThread(THREAD_ALL_ACCESS, FALSE, GetCurrentThreadId());
+}
+
+//------------------------------------------------------------------------------
+// OsGetThreadStartAddress
+//------------------------------------------------------------------------------
+extern void * OsGetThreadStartAddress(void * thread)
+{
+	void * adr = _ReturnAddress();
+	NTSTATUS status = NtQueryInformationThread(
+							thread,
+							ThreadQuerySetWin32StartAddress,
+							&adr, sizeof(void *), 0);
+	
+	if( !NT_SUCCESS(status) ) {
+		LOG_ERROR("NtQueryInformationThread(%p) error 0x%08X", thread, status);
+	}
+	return adr;
+}
+
+//------------------------------------------------------------------------------
+// OsGetThreadId
+//------------------------------------------------------------------------------
+extern void * OsGetThreadId(void * thread)
+{
+	return (void *)GetThreadId(thread);
 }

@@ -12,7 +12,7 @@ extern __declspec(dllexport) void __cdecl InstallResMon(void)
 {
 	InstallResMonitoringSystem(GetModuleHandle(0), MON_DEFAULT_LIMITS);
 
-	if( gMainThread )
+/*	if( gMainThread )
 		return;
 
 	// add for monitoring current thread
@@ -39,16 +39,16 @@ extern __declspec(dllexport) void __cdecl InstallResMon(void)
 			CloseHandle(gMainThread);
 			gMainThread = 0;
 		}
-	}
+	}*/
 }
 
 extern __declspec(dllexport) void __cdecl UninstallResMon(void)
 {
-	if( gMainThread ) {
+/*	if( gMainThread ) {
 		MonClose(gMainThread);
 		CloseHandle(gMainThread);
 		gMainThread = 0;
-	}
+	}*/
 	UninstallResMonitoringSystem();
 }
 
@@ -80,6 +80,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 			LOG_INFO(": ************************************");
 			LOG_INFO(": resmon.dll unload");
 			LOG_INFO(": ************************************ ");
+			//MonLogAllResources();
         	break;
     }
     return TRUE;
