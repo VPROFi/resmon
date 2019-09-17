@@ -191,7 +191,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 			ctx.Eax = (DWORD)codeBuf;
 			#endif
 
-	        SetThreadContext(pi.hThread, &ctx);
+			SetThreadContext(pi.hThread, &ctx);
 			ResumeThread(pi.hThread);
 			do {
 				Sleep(30);
