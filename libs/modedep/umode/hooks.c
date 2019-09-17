@@ -55,6 +55,7 @@ typedef enum {
 	VirtualMemType,
 	CallocMemType,
 	MallocMemType,
+	VirtualRemoteProcessMemType,
 	LastMemType
 } MemoryType;
 
@@ -73,6 +74,8 @@ extern const char * GetMemoryTypeName(unsigned long mtype)
 			return (const char *)"Calloc";
 		case MallocMemType:
 			return (const char *)"Malloc";
+		case VirtualRemoteProcessMemType:
+			return (const char *)"Virtual remote";
 	}
 	return (const char *)"Unknown";
 }
@@ -341,6 +344,7 @@ static void * VirtualAllocCommon(
 {
 	Method * m = GetMonitorMethods(0);
 	void * ptr = 0;
+	MemoryType mtype = VirtualMemType;
 
 	ASSERT( index == iVirtualAllocExNuma || \
 			index == iVirtualAllocEx || \
@@ -379,12 +383,16 @@ static void * VirtualAllocCommon(
 			break;
 	}
 
-	if( ptr )
+	if( hProcess && GetProcessId(hProcess) != GetCurrentProcessId() )
+		mtype = VirtualRemoteProcessMemType;
+
+	if( ptr ) {
 		MonAlloc(ptr,
 			returnAddress,
 			dwSize,
 			hProcess ? (ptr_t)GetProcessId(hProcess):(ptr_t)GetCurrentProcessId(),
-			VirtualMemType);
+			mtype);
+	}
 	return ptr;
 }
 //------------------------------------------------------------------------------
