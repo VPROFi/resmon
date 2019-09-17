@@ -1467,7 +1467,7 @@ extern signed __stdcall UninstallResMonitoringSystem(void)
 {
 	SystemState	state = ssUndefined;
 	ResContext * resCtx = GetResourceContext();
-	signed res = FALSE;
+	signed res = TRUE;
 
 	// Деинициализация возможна при переходе статуса ssWork->ssUninit
 	if( ResMonitorState( ssUninit, ssWork ) != ssWork ) {
@@ -1507,11 +1507,8 @@ extern signed __stdcall UninstallResMonitoringSystem(void)
 			if( rsList->avl ) {
 				if( !IsAllThreadsTerminated((ResThread *)rsList->avl) ) {
 					RESLOG("error can`t unload " \
-						"... active thread(s) detect");
-					OsReleaseResource(rsList->accessCs);
-					state = ResMonitorState(ssWork, ssUninit);
-					ASSERT( state == ssUninit );
-					return FALSE;
+						"... active thread(s) detect (resmon blocked)");
+					res = FALSE;
 				}
 			}
 			OsReleaseResource(rsList->accessCs);
@@ -1527,8 +1524,11 @@ extern signed __stdcall UninstallResMonitoringSystem(void)
 
 	FreeResources();
 
-	state = ResMonitorState(ssUndefined, ssCheck);
-	ASSERT( state == ssCheck );
+	// if active thread leak detect - block state
+	if( res ) {
+		state = ResMonitorState(ssUndefined, ssCheck);
+		ASSERT( state == ssCheck );
+	}
 
 	return res;
 }
