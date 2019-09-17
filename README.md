@@ -26,6 +26,8 @@
 
 ## Использование
 
+Для сбора статистики используем https://docs.microsoft.com/en-us/sysinternals/downloads/debugview или windbg.
+
 Лучше 1 раз увидеть, чем 100 раз услышать — TODO: видео
 
 В виде `resmon_client.exe` (использует resmon.dll), запускаем `resmon_client.exe <monitoring file.exe>`, по завершению последнего получим статистику.
