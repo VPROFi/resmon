@@ -211,7 +211,6 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				#else
 				ctx.Eip = (DWORD)((char*)codeBuf+2);
 				#endif
-				SetThreadContext(pi.hThread, &ctx);
 			} else {
 				#if defined(_WIN64)
 				ctx.Rip = (DWORD64)loader->realcall;
@@ -219,6 +218,7 @@ int __cdecl _tmain(int argc, _TCHAR* argv[])
 				ctx.Eip = (DWORD)loader->realcall;
 				#endif
 			}
+			SetThreadContext(pi.hThread, &ctx);
 		}
 	}
 	ResumeThread(pi.hThread);
