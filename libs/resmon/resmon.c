@@ -115,7 +115,9 @@ typedef struct {
 	void *              monitorThread;
 	void *				mainThread;
 
+	ResSystemTimes		timesInit;
 	ResObjectCounters	counters;
+	ResObjectCounters	process;
 
 	// snapshot
 
@@ -478,11 +480,13 @@ extern void MonAlloc(void * adr,
 					unsigned long mtype)
 {
 	RsList * rsList = AcquireResourceList(MemoryResList, TRUE);
+	ResNode * resNode = 0;
+
 
 	if( !rsList )
 		return;
 
-	if( PTR(adr) ) {
+	if( PTR(adr) && !AvlGetResNode(rsList->avl, adr) ) {
 		ResMemory * resMem = (ResMemory *)AllocObject(ResMemoryObjectType,
 											returnAddress, sizeof(ResMemory));
 		if( PTR(resMem) ) {
@@ -501,8 +505,6 @@ extern void MonAlloc(void * adr,
 			resMem->size = size;
 			resMem->tag = tag;
 			resMem->mtype = mtype;
-
-			ASSERT( AvlGetResNode(rsList->avl, adr) == 0 );
 
 			rsList->avl = AvlInsert(rsList->avl, adr, (ResNode *)resMem);
 
@@ -531,6 +533,9 @@ extern void MonFree(void * ptr)
 		return;
 
 	do {
+
+		if( !PTR(ptr) )
+			break;
 
 		rsList->avl = AvlRemoveNodeByKey(rsList->avl, ptr, (ResNode **)&resMem);
 
@@ -796,16 +801,14 @@ static void ProcessThreadNodes(
 // UpdateThreadsPerfomance
 //------------------------------------------------------------------------------
 static void UpdateThreadsPerfomance(
-				const ResSystemTimes * timesInit,
 				ResPercentTimes * pcnt,
-				unsigned long * threadTotalUsed )
+				const ResSystemTimes * timesInit)
 {
 	RsList * rsList = NULL;
 
 	ASSERT( pcnt->cpuUserUsed == 0 );
 	ASSERT( pcnt->cpuKrnlUsed == 0 );
 	ASSERT( pcnt->cpuTotalUsed == 0 );
-	*threadTotalUsed = 0;
 
 	rsList = AcquireResourceList(ThreadResList, FALSE);
 	if( !rsList ) {
@@ -815,8 +818,6 @@ static void UpdateThreadsPerfomance(
 
 	if( PTR(rsList->avl) )
 		ProcessThreadNodes((ResThread *)rsList->avl, timesInit, pcnt);
-
-	*threadTotalUsed = (unsigned long)rsList->totalResources;
 
 	OsReleaseResource(rsList->accessCs);
 	return;
@@ -856,12 +857,62 @@ extern void MonUpdateTimes(
 }
 
 //------------------------------------------------------------------------------
+// MonCreateSnapShot
+//------------------------------------------------------------------------------
+static signed MonCreateSnapShot(void)
+{
+	ResContext * resCtx = GetResourceContext();
+
+	resCtx->counters.pcnt.cpuUserUsed = 0;
+	resCtx->counters.pcnt.cpuKrnlUsed = 0;
+	resCtx->counters.pcnt.cpuTotalUsed = 0;
+
+	// threads and cpu used
+	UpdateThreadsPerfomance(
+				&resCtx->counters.pcnt,
+				&resCtx->timesInit);
+
+	OsGetProcessPerfomance(&resCtx->process, &resCtx->timesInit);
+
+	// thread object used
+	RsList * rsList = AcquireResourceList(ThreadResList, FALSE);
+	if( rsList ) {
+		resCtx->sshot.threadUsed = (unsigned long)rsList->totalResources;
+		OsReleaseResource(rsList->accessCs);
+	} else {
+		LOG_ERROR("can`t acquire thread resource list");
+		return FALSE;
+	}
+
+	// sync object used
+	rsList = AcquireResourceList(SyncResList, FALSE);
+	if( rsList ) {
+		resCtx->sshot.syncObjectUsed = (unsigned long)rsList->totalResources;
+		OsReleaseResource(rsList->accessCs);
+	} else {
+		LOG_ERROR("can`t acquire sync resource list");
+		return FALSE;
+	}
+
+	// memory used
+	rsList = AcquireResourceList(MemoryResList, FALSE);
+	if( rsList ) {
+		resCtx->sshot.memoryUsed = rsList->totalResources;
+		OsReleaseResource(rsList->accessCs);
+	} else {
+		LOG_ERROR("can`t acquire memory resource list");
+		return FALSE;
+	}
+
+	OsGetSystemTimes(&resCtx->timesInit);
+	return TRUE;
+}
+
+//------------------------------------------------------------------------------
 // ResMonitorThread
 //------------------------------------------------------------------------------
 static unsigned long __stdcall ResMonitorThread(void * shutDownEvent)
 {
-	ResSystemTimes timesInit = {0};
-	ResObjectCounters pcounters = {0};
 	ResContext * resCtx = GetResourceContext();
 	long exitStatus = 0;
 	unsigned long lastError = OS_ERROR_NOT_READY;
@@ -869,24 +920,11 @@ static unsigned long __stdcall ResMonitorThread(void * shutDownEvent)
 	LOG_INFO(" ... start");
 
 	ASSERT(shutDownEvent != NULL);
-	if( !OsGetSystemTimes(&timesInit) ) {
-		return OsExitThread(OsGetLastError());
-	}
 
 	do {
-		RsList * rsList = NULL;
-		unsigned long resMonInterval = 0, threadTotalUsed = 0, syncTotalUsed = 0;
-		size_tr memoryTotalUsed = 0;
 
-		resCtx->counters.pcnt.cpuUserUsed = 0;
-		resCtx->counters.pcnt.cpuKrnlUsed = 0;
-		resCtx->counters.pcnt.cpuTotalUsed = 0;
-
-		// threads and cpu used
-		UpdateThreadsPerfomance(
-					&timesInit,
-					&resCtx->counters.pcnt,
-					&threadTotalUsed );
+		if( !MonCreateSnapShot() )
+			break;
 
 		if( resCtx->counters.pcnt.cpuTotalUsed )
 			RESLOG("all threads used %u%% cpu (kernel %u%%, user %u%%)", \
@@ -894,114 +932,80 @@ static unsigned long __stdcall ResMonitorThread(void * shutDownEvent)
 				resCtx->counters.pcnt.cpuKrnlUsed, \
 				resCtx->counters.pcnt.cpuUserUsed);
 
-		OsGetProcessPerfomance(&pcounters, &timesInit);
-
-		if( pcounters.pcnt.cpuTotalUsed || pcounters.diskUsed )
+		if( resCtx->process.pcnt.cpuTotalUsed || resCtx->process.diskUsed )
 			RESLOG("process [%u] used %u%% cpu (kernel %u%%, user %u%%) " \
 				"disk used %I64u bytes", OsGetCurrentProcessId(), \
-				pcounters.pcnt.cpuTotalUsed, pcounters.pcnt.cpuKrnlUsed, \
-				pcounters.pcnt.cpuUserUsed, pcounters.diskUsed );
-
-		// sync object used
-		rsList = AcquireResourceList(SyncResList, FALSE);
-		if( rsList ) {
-			syncTotalUsed = (unsigned long)rsList->totalResources;
-			OsReleaseResource(rsList->accessCs);
-		} else {
-			LOG_ERROR("can`t acquire sync resource list");
-		}
-
-		// memory used
-		rsList = AcquireResourceList(MemoryResList, FALSE);
-		if( rsList ) {
-			memoryTotalUsed = rsList->totalResources;
-			OsReleaseResource(rsList->accessCs);
-		} else {
-			LOG_ERROR("can`t acquire memory resource list");
-		}
-
-		resCtx->sshot.threadUsed = threadTotalUsed;
-		resCtx->sshot.syncObjectUsed = syncTotalUsed;
-		resCtx->sshot.memoryUsed = memoryTotalUsed;
+				resCtx->process.pcnt.cpuTotalUsed, resCtx->process.pcnt.cpuKrnlUsed, \
+				resCtx->process.pcnt.cpuUserUsed, resCtx->process.diskUsed );
 
 		RESLOG("threads used %u, sync object used %u, memory used %u", \
 			resCtx->sshot.threadUsed, \
 			resCtx->sshot.syncObjectUsed, \
 			resCtx->sshot.memoryUsed);
 
-		// fist time (lastError == ERROR_NOT_READY) not informative
-		if( lastError != OS_ERROR_NOT_READY ) {
+		if( resCtx->sshot.memoryUsed > resCtx->mlim.maxMemoryUsedLimit ) {
+			// Превышение лимита памяти - выводим логи
+			RESLOG("update memory limit: from 0x%p to 0x%p", \
+				resCtx->mlim.maxMemoryUsedLimit, resCtx->sshot.memoryUsed);
+			resCtx->mlim.maxMemoryUsedLimit = resCtx->sshot.memoryUsed;
+		}
 
-			if( resCtx->sshot.memoryUsed > resCtx->mlim.maxMemoryUsedLimit ) {
-				// Превышение лимита памяти - выводим логи
-				RESLOG("update memory limit: from 0x%p to 0x%p", \
-					resCtx->mlim.maxMemoryUsedLimit, resCtx->sshot.memoryUsed);
-			}
+		if( resCtx->counters.pcnt.cpuTotalUsed > resCtx->mlim.maxCpuUsedLimit ) {
+			// Единственно что можем сделать - увеличить паузу 
+			// между снятием показателей
+			ASSERT(	resCtx->mlim.resMonInterval*2 > resCtx->mlim.resMonInterval );
+			resCtx->mlim.resMonInterval += \
+			(resCtx->mlim.resMonInterval * (resCtx->counters.pcnt.cpuTotalUsed - resCtx->mlim.maxCpuUsedLimit))/100;
+			RESLOG("update cpu used limit overflow from %u%% to %u%%", \
+				resCtx->mlim.maxCpuUsedLimit, resCtx->counters.pcnt.cpuTotalUsed);
+			RESLOG("monitoring pause update to %u ms", resCtx->mlim.resMonInterval);
+			resCtx->mlim.maxCpuUsedLimit = resCtx->counters.pcnt.cpuTotalUsed;
+		}
 
-			if( resCtx->counters.pcnt.cpuTotalUsed > resCtx->mlim.maxCpuUsedLimit ) {
-
-				// Единственно что можем сделать - увеличить паузу 
-				// между снятием показателей
-				ASSERT(	resCtx->mlim.resMonInterval*2 > resCtx->mlim.resMonInterval );
-				resCtx->mlim.resMonInterval += \
-				(resCtx->mlim.resMonInterval * (resCtx->counters.pcnt.cpuTotalUsed - resCtx->mlim.maxCpuUsedLimit))/100;
-
-				RESLOG("update cpu used limit overflow from %u%% to %u%%", \
-					resCtx->mlim.maxCpuUsedLimit, resCtx->counters.pcnt.cpuTotalUsed);
-				RESLOG("monitoring pause update to %u ms", resCtx->mlim.resMonInterval);
-
-				resCtx->mlim.maxCpuUsedLimit = resCtx->counters.pcnt.cpuTotalUsed;
-
-			}
-
-			if( resCtx->sshot.threadUsed >= resCtx->mlim.maxThreadUsedLimit ) {
-				// Если можем продолжить в указанных
-				// условиях - увеличим лимит
-				rsList = GetResourceList( ThreadResList );
-				if( OsReleaseSemaphore(rsList->accessSemaphore,
-					(resCtx->sshot.threadUsed - resCtx->mlim.maxThreadUsedLimit)+1,
-					NULL) ) {
-					RESLOG("update thread limit: %u to %u", \
-						resCtx->mlim.maxThreadUsedLimit, resCtx->sshot.threadUsed);
-					resCtx->mlim.maxThreadUsedLimit = resCtx->sshot.threadUsed;
-				} else {
-					LOG_ERROR("ReleaseSemaphore(thread) error %u", \
-								OsGetLastError());
-				}
-			}
-
-			if( resCtx->sshot.syncObjectUsed >= resCtx->mlim.maxSyncObjectUsedLimit ) {
-				// Если можем продолжить в указанных
-				// условиях - увеличим лимит
-				// Без захвата ресурса освобождаем семафор
-				rsList = GetResourceList( SyncResList );
-				if( OsReleaseSemaphore(rsList->accessSemaphore,
-					(resCtx->sshot.syncObjectUsed - resCtx->mlim.maxSyncObjectUsedLimit)+1,
-					NULL) ) {
-					RESLOG("update sync limit: %u to %u", \
-					resCtx->mlim.maxSyncObjectUsedLimit, resCtx->sshot.syncObjectUsed);
-					resCtx->mlim.maxSyncObjectUsedLimit = resCtx->sshot.syncObjectUsed;
-				} else {
-					LOG_ERROR("ReleaseSemaphore(sync) error %u", \
-								OsGetLastError());
-				}
-			}
-
-			if( resCtx->counters.diskUsed >= resCtx->mlim.maxDiskUsedLimit ) {
-				RESLOG("update disk used limit overflow from %I64u to %I64u", \
-					resCtx->mlim.maxDiskUsedLimit, resCtx->counters.diskUsed);
-				resCtx->mlim.maxDiskUsedLimit = resCtx->counters.diskUsed;
+		if( resCtx->sshot.threadUsed >= resCtx->mlim.maxThreadUsedLimit ) {
+			// Если можем продолжить в указанных
+			// условиях - увеличим лимит
+			RsList * rsList = GetResourceList( ThreadResList );
+			if( OsReleaseSemaphore(rsList->accessSemaphore,
+				(resCtx->sshot.threadUsed - resCtx->mlim.maxThreadUsedLimit)+1,
+				NULL) ) {
+				RESLOG("update thread limit: %u to %u", \
+					resCtx->mlim.maxThreadUsedLimit, resCtx->sshot.threadUsed);
+				resCtx->mlim.maxThreadUsedLimit = resCtx->sshot.threadUsed;
+			} else {
+				LOG_ERROR("ReleaseSemaphore(thread) error %u", \
+							OsGetLastError());
 			}
 		}
 
-		resMonInterval = resCtx->mlim.resMonInterval;
-		ASSERT(resMonInterval > 0);
+		if( resCtx->sshot.syncObjectUsed >= resCtx->mlim.maxSyncObjectUsedLimit ) {
+			// Если можем продолжить в указанных
+			// условиях - увеличим лимит
+			// Без захвата ресурса освобождаем семафор
+			RsList * rsList = GetResourceList( SyncResList );
+			if( OsReleaseSemaphore(rsList->accessSemaphore,
+				(resCtx->sshot.syncObjectUsed - resCtx->mlim.maxSyncObjectUsedLimit)+1,
+				NULL) ) {
+				RESLOG("update sync limit: %u to %u", \
+				resCtx->mlim.maxSyncObjectUsedLimit, resCtx->sshot.syncObjectUsed);
+				resCtx->mlim.maxSyncObjectUsedLimit = resCtx->sshot.syncObjectUsed;
+			} else {
+				LOG_ERROR("ReleaseSemaphore(sync) error %u", \
+							OsGetLastError());
+			}
+		}
 
-		OsGetSystemTimes(&timesInit);
+		if( resCtx->counters.diskUsed >= resCtx->mlim.maxDiskUsedLimit ) {
+			RESLOG("update disk used limit overflow from %I64u to %I64u", \
+				resCtx->mlim.maxDiskUsedLimit, resCtx->counters.diskUsed);
+			resCtx->mlim.maxDiskUsedLimit = resCtx->counters.diskUsed;
+		}
+
+		ASSERT(resCtx->mlim.resMonInterval > 0);
 
 		lastError = OsWaitForSingleObject(
 						shutDownEvent,
-						resMonInterval);
+						resCtx->mlim.resMonInterval);
 
 		if( lastError != OsWaitObject0 &&
 			lastError != OsWaitTimeout ) {
@@ -1217,7 +1221,6 @@ static FreeResources(void)
 		}
 		OsDeleteResourceObject(rsList->accessCs);
 		rsList->accessCs = 0;
-
 
 		// Все ресурсы на этом этапе должны быть освобождены
 		ASSERT( rsList->avl == 0 );
@@ -1552,9 +1555,9 @@ extern signed __stdcall InstallResMonitoringSystem(void * base, MonLimits * limi
 		if( !CreateResources(limits) )
 			break;
 
-		if( !OsBaseAndDataFromPointer(PTR(base) ? base:_ReturnAddress(), \
+		if( !OsModuleInfoFromPointer(PTR(base) ? base:_ReturnAddress(), \
 				&resCtx->mod) ) {
-			LOG_ERROR("OsBaseAndDataFromPointer() error");
+			LOG_ERROR("OsModuleInfoFromPointer() error");
 			break;
 		}
 
@@ -1571,6 +1574,11 @@ extern signed __stdcall InstallResMonitoringSystem(void * base, MonLimits * limi
 		resCtx->shutDownEvent = OsCreateEvent(TRUE, FALSE);
 		if( !resCtx->shutDownEvent ) {
 			LOG_ERROR("OsCreateEvent(shutDownEvent) error");
+			break;
+		}
+
+		if( !OsGetSystemTimes(&resCtx->timesInit) ) {
+			LOG_ERROR("OsGetSystemTimes() error");
 			break;
 		}
 

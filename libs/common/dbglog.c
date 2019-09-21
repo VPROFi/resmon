@@ -12,7 +12,7 @@ extern uni_char * getmoduleprefix(void * returnAddress)
 	static uni_char prefix[DEBUG_MODULE_MAX_NAME_LEN] = {0};
 	if( !(*prefix) ) {
 		OsModuleData mod = {0};
-		if( OsBaseAndDataFromPointer(returnAddress, &mod) ) {
+		if( OsModuleInfoFromPointer(returnAddress, &mod) ) {
 			ASSERT( PTR(mod.basename.str) );
 			ASSERT( mod.basename.size >= sizeof(uni_char) );
 			OsMoveMemory(prefix, mod.basename.str, 

@@ -226,6 +226,10 @@ typedef struct _UNICODE_STRING
 } UNICODE_STRING, *PUNICODE_STRING;
 
 typedef const UNICODE_STRING *PCUNICODE_STRING;
+EXTERN_C BOOLEAN __stdcall RtlEqualUnicodeString(
+    _In_ PCUNICODE_STRING String1,
+    _In_ PCUNICODE_STRING String2,
+    _In_ BOOLEAN CaseInSensitive);
 
 typedef enum _KWAIT_REASON {
   Executive = 0x0,

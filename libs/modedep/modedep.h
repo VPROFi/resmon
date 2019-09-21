@@ -73,7 +73,8 @@ typedef struct {
 	unsigned long imageSize;
 	UniStr basename;
 } OsModuleData;
-signed OsBaseAndDataFromPointer(void *ptr, OsModuleData * mod);
+signed OsModuleInfoFromPointer(void *ptr, OsModuleData * mod);
+signed OsModuleInfoFromName(UniStrConst *name, OsModuleData * mod);
 void OsFreeModuleData(OsModuleData * mod);
 //------------------------------------------------------------------------------
 // perfomance api

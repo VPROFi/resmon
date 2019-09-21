@@ -15,7 +15,7 @@ extern "C"
 #define MON_MAXIMUM_CPU_USAGE 30                          // 30%
 #define MON_MAXIMUM_MEMORY_USAGE (1024*1024*128)          // 128 mb
 #define MON_MAXIMUM_THREAD_USAGE (100-1)                  // 100
-#define MON_MAXIMUM_SYNCHRONIZATION_OBJECT_USAGE (180-1)  // 180
+#define MON_MAXIMUM_SYNCHRONIZATION_OBJECT_USAGE (3000-1) // 3000
 #define MON_DEFAULT_RES_MONITORING_INTERVAL 5000          // 5 sec
 
 typedef struct {

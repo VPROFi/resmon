@@ -270,9 +270,9 @@ extern void OsFreeModuleData(OsModuleData * mod)
 	}
 }
 //------------------------------------------------------------------------------
-// OsCorrectBaseAndGetFileData
+// OsModuleInfo
 //------------------------------------------------------------------------------
-extern signed OsBaseAndDataFromPointer(void *ptr, OsModuleData * mod)
+static signed OsModuleInfo(void *ptr, UNICODE_STRING * us, OsModuleData * mod)
 {
 
 	#if defined _M_IX86
@@ -299,8 +299,10 @@ extern signed OsBaseAndDataFromPointer(void *ptr, OsModuleData * mod)
 	mod->base = 0;
 	mod->imageSize = 0;
 
-	if( !UPTR(ptr) )
+	if( !UPTR(ptr) && !UPTR(us) )
 		ptr = _ReturnAddress();
+
+	ASSERT( (UPTR(ptr) && !UPTR(us)) || (!UPTR(ptr) && UPTR(us)) );
 
 	EnterCriticalSection(peb->LoaderLock);
 
@@ -319,8 +321,9 @@ extern signed OsBaseAndDataFromPointer(void *ptr, OsModuleData * mod)
 		ASSERT( PTR_USER(ldte->BaseDllName.Buffer) );
 		ASSERT( ldte->SizeOfImage != 0 );
 
-		if( ptr >= ldte->DllBase && \
-			ptr < (void *)((char *)ldte->DllBase + ldte->SizeOfImage) ) {
+		if( (us && RtlEqualUnicodeString(us, &ldte->BaseDllName, TRUE)) || \
+			(ptr && (ptr >= ldte->DllBase && \
+			ptr < (void *)((char *)ldte->DllBase + ldte->SizeOfImage))) ) {
 
 			mod->basename.str = HeapAlloc(GetProcessHeap(),
 						HEAP_ZERO_MEMORY,
@@ -341,4 +344,26 @@ extern signed OsBaseAndDataFromPointer(void *ptr, OsModuleData * mod)
 	}
 	LeaveCriticalSection(peb->LoaderLock);
 	return UPTR(mod->base) ? TRUE:FALSE;
+}
+
+//------------------------------------------------------------------------------
+// OsModuleInfoFromPointer
+//------------------------------------------------------------------------------
+extern signed OsModuleInfoFromPointer(void *ptr, OsModuleData * mod)
+{
+	return OsModuleInfo(ptr, (UNICODE_STRING *)0, mod);
+}
+
+//------------------------------------------------------------------------------
+// OsModuleInfoFromPointer
+//------------------------------------------------------------------------------
+extern signed OsModuleInfoFromName(UniStrConst *name, OsModuleData * mod)
+{
+	UNICODE_STRING us = {(USHORT)name->size, \
+						(USHORT)name->size+sizeof(WCHAR), \
+						(PWCH)name->str};
+	ASSERT( UPTR(name) );
+	ASSERT( UPTR(name->str) );
+	ASSERT( name->size >= sizeof(uni_char) );
+	return OsModuleInfo((void *)0, &us, mod);
 }

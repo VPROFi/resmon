@@ -46,8 +46,31 @@ typedef enum {
 	ifree,
 	irealloc,
 	icalloc,
-	iMax
+	i_aligned_free,
+	i_aligned_malloc,
+	i_aligned_offset_malloc,
+	i_aligned_offset_realloc,
+	i_aligned_realloc,
+	iMaxMsvcrt,
+	iexit_ucrt = iMaxMsvcrt,
+	i_exit_ucrt,
+	i_c_exit_ucrt,
+	i_cexit_ucrt,
+	imalloc_ucrt,
+	ifree_ucrt,
+	irealloc_ucrt,
+	icalloc_ucrt,
+	i_aligned_free_ucrt,
+	i_aligned_malloc_ucrt,
+	i_aligned_offset_malloc_ucrt,
+	i_aligned_offset_realloc_ucrt,
+	i_aligned_offset_recalloc_ucrt,
+	i_aligned_realloc_ucrt,
+	i_aligned_recalloc_ucrt,
+	iMaxUcrtbase,
+	iMax = iMaxUcrtbase
 } HookApiIndex;
+
 
 // memory types
 typedef enum {
@@ -55,6 +78,7 @@ typedef enum {
 	VirtualMemType,
 	CallocMemType,
 	MallocMemType,
+	MallocAlignMemType,
 	VirtualRemoteProcessMemType,
 	LastMemType
 } MemoryType;
@@ -74,6 +98,8 @@ extern const char * GetMemoryTypeName(unsigned long mtype)
 			return (const char *)"Calloc";
 		case MallocMemType:
 			return (const char *)"Malloc";
+		case MallocAlignMemType:
+			return (const char *)"Malloc align";
 		case VirtualRemoteProcessMemType:
 			return (const char *)"Virtual remote";
 	}
@@ -851,7 +877,7 @@ static void * __cdecl mallocHook(_In_ size_t _Size)
 	Method * m = GetMonitorMethods(0);
 	void * ptr = 0;
 
-	ASSERT( UPTR(m[icalloc].osapi) );
+	ASSERT( UPTR(m[imalloc].osapi) );
 	ptr = ((void * (__cdecl *)(size_t)) \
 		m[imalloc].osapi)(_Size);
 
@@ -886,6 +912,334 @@ static void __cdecl freeHook(_Inout_opt_ void * _Memory)
 	MonFree(_Memory);
 	ASSERT( UPTR(m[ifree].osapi) );
 	((void (__cdecl *)(void*))m[ifree].osapi)(_Memory);
+}
+
+
+//------------------------------------------------------------------------------
+// _aligned_freeHook
+//------------------------------------------------------------------------------
+static void __cdecl _aligned_freeHook(void *memblock)
+{
+	Method * m = GetMonitorMethods(0);
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_free].osapi) );
+	((void (__cdecl *)(void*))m[i_aligned_free].osapi)(memblock);
+}
+//------------------------------------------------------------------------------
+// _aligned_mallocHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_mallocHook(size_t size, size_t align)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[i_aligned_malloc].osapi) );
+	ptr = ((void * (__cdecl *)(size_t, size_t)) \
+		m[i_aligned_malloc].osapi)(size, align);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_offset_mallocHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_offset_mallocHook(
+	size_t size,
+	size_t align,
+	size_t offset)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[i_aligned_offset_malloc].osapi) );
+	ptr = ((void * (__cdecl *)(size_t, size_t, size_t)) \
+		m[i_aligned_offset_malloc].osapi)(size, align, offset);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_offset_reallocHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_offset_reallocHook(
+	void * memblock,
+	size_t size,
+	size_t align,
+	size_t offset)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_offset_realloc].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t,size_t,size_t)) \
+		m[i_aligned_offset_realloc].osapi)(memblock, size, align, offset);
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_reallocHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_reallocHook(
+	void * memblock,
+	size_t size,
+	size_t align)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_realloc].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t,size_t)) \
+		m[i_aligned_realloc].osapi)(memblock,size,align);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// exit_ucrtHook
+//------------------------------------------------------------------------------
+static void __cdecl exit_ucrtHook(_In_ int _Code)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("exit_ucrt [%u] %i", GetCurrentProcessId(), _Code);
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(int))\
+		m[iexit_ucrt].osapi)(_Code);
+}
+
+//------------------------------------------------------------------------------
+// _exit_ucrtHook
+//------------------------------------------------------------------------------
+static void __cdecl _exit_ucrtHook(_In_ int _Code)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_exit_ucrt [%u] %i", GetCurrentProcessId(), _Code);
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(int))\
+		m[i_exit_ucrt].osapi)(_Code);
+}
+
+//------------------------------------------------------------------------------
+// _cexit_ucrtHook
+//------------------------------------------------------------------------------
+static void __cdecl _cexit_ucrtHook(void)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_cexit_ucrt [%u]", GetCurrentProcessId());
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(void))\
+		m[i_cexit_ucrt].osapi)();
+}
+
+//------------------------------------------------------------------------------
+// _c_exit_ucrtHook
+//------------------------------------------------------------------------------
+static void __cdecl _c_exit_ucrtHook(void)
+{
+	Method * m = GetMonitorMethods(0);
+	LOG_INFO("_c_exit_ucrt [%u]", GetCurrentProcessId());
+	UninstallResMonitoringSystem();
+	((void (__cdecl *)(void))\
+		m[i_c_exit_ucrt].osapi)();
+}
+
+//------------------------------------------------------------------------------
+// calloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl calloc_ucrtHook(_In_ size_t _Count, _In_ size_t _Size)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[icalloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(size_t, size_t)) \
+		m[icalloc_ucrt].osapi)(_Count, _Size);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), _Count*_Size, (ptr_t)0, CallocMemType);
+	return ptr;
+
+}
+
+//------------------------------------------------------------------------------
+// malloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl malloc_ucrtHook(_In_ size_t _Size)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[imalloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(size_t)) \
+		m[imalloc_ucrt].osapi)(_Size);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), _Size, (ptr_t)0, MallocMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// realloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl realloc_ucrtHook(_In_opt_ void * _Memory, _In_ size_t _NewSize)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(_Memory);
+	ASSERT( UPTR(m[irealloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t)) \
+		m[irealloc_ucrt].osapi)(_Memory, _NewSize);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), _NewSize, (ptr_t)0, MallocMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// free_ucrtHook
+//------------------------------------------------------------------------------
+static void __cdecl free_ucrtHook(_Inout_opt_ void * _Memory)
+{
+	Method * m = GetMonitorMethods(0);
+	MonFree(_Memory);
+	ASSERT( UPTR(m[ifree_ucrt].osapi) );
+	((void (__cdecl *)(void*))m[ifree_ucrt].osapi)(_Memory);
+}
+
+//------------------------------------------------------------------------------
+// _aligned_free_ucrtHook
+//------------------------------------------------------------------------------
+static void __cdecl _aligned_free_ucrtHook(void *memblock)
+{
+	Method * m = GetMonitorMethods(0);
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_free_ucrt].osapi) );
+	((void (__cdecl *)(void*))m[i_aligned_free_ucrt].osapi)(memblock);
+}
+//------------------------------------------------------------------------------
+// _aligned_malloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_malloc_ucrtHook(size_t size, size_t align)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[i_aligned_malloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(size_t, size_t)) \
+		m[i_aligned_malloc_ucrt].osapi)(size, align);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_offset_malloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_offset_malloc_ucrtHook(
+	size_t size,
+	size_t align,
+	size_t offset)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+
+	ASSERT( UPTR(m[i_aligned_offset_malloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(size_t, size_t, size_t)) \
+		m[i_aligned_offset_malloc_ucrt].osapi)(size, align, offset);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_offset_realloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_offset_realloc_ucrtHook(
+	void * memblock,
+	size_t size,
+	size_t align,
+	size_t offset)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_offset_realloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t,size_t,size_t)) \
+		m[i_aligned_offset_realloc_ucrt].osapi)(memblock, size, align, offset);
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_offset_recalloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_offset_recalloc_ucrtHook(
+	void * memblock,
+	size_t count,
+	size_t size,
+	size_t align,
+	size_t offset)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_offset_recalloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t,size_t,size_t,size_t)) \
+		m[i_aligned_offset_recalloc_ucrt].osapi)(memblock, count, size, align, offset);
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), count*size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_realloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_realloc_ucrtHook(
+	void * memblock,
+	size_t size,
+	size_t align)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_realloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t,size_t)) \
+		m[i_aligned_realloc_ucrt].osapi)(memblock,size,align);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
+}
+
+//------------------------------------------------------------------------------
+// _aligned_recalloc_ucrtHook
+//------------------------------------------------------------------------------
+static void * __cdecl _aligned_recalloc_ucrtHook(
+	void * memblock,
+	size_t count,
+	size_t size,
+	size_t align)
+{
+	Method * m = GetMonitorMethods(0);
+	void * ptr = 0;
+	MonFree(memblock);
+	ASSERT( UPTR(m[i_aligned_recalloc_ucrt].osapi) );
+	ptr = ((void * (__cdecl *)(void *,size_t,size_t,size_t)) \
+		m[i_aligned_recalloc_ucrt].osapi)(memblock,count,size,align);
+
+	if( ptr )
+		MonAlloc(ptr, _ReturnAddress(), count*size, (ptr_t)0, MallocAlignMemType);
+	return ptr;
 }
 
 //------------------------------------------------------------------------------
@@ -929,13 +1283,36 @@ extern Method * GetMonitorMethods(__out_opt unsigned long * totalMethods)
 		{0, 0, "malloc",	    mallocHook},
 		{0, 0, "free",		    freeHook},
 		{0, 0, "realloc",	    reallocHook},
-		{0, 0, "calloc",	    callocHook}};
+		{0, 0, "calloc",	    callocHook},
+		{0, 0, "_aligned_free",		_aligned_freeHook},
+		{0, 0, "_aligned_malloc",	_aligned_mallocHook},
+		{0, 0, "_aligned_offset_malloc",_aligned_offset_mallocHook},
+		{0, 0, "_aligned_offset_realloc",_aligned_offset_reallocHook},
+		{0, 0, "_aligned_realloc",	_aligned_reallocHook},
+		{0, 0, "exit",		    exit_ucrtHook},
+		{0, 0, "_exit",		    _exit_ucrtHook},
+		{0, 0, "_c_exit",	    _c_exit_ucrtHook},
+		{0, 0, "_cexit",	    _cexit_ucrtHook},
+		{0, 0, "malloc",	    malloc_ucrtHook},
+		{0, 0, "free",		    free_ucrtHook},
+		{0, 0, "realloc",	    realloc_ucrtHook},
+		{0, 0, "calloc",	    calloc_ucrtHook},
+		{0, 0, "_aligned_free",		_aligned_free_ucrtHook},
+		{0, 0, "_aligned_malloc",	_aligned_malloc_ucrtHook},
+		{0, 0, "_aligned_offset_malloc",_aligned_offset_malloc_ucrtHook},
+		{0, 0, "_aligned_offset_realloc",_aligned_offset_realloc_ucrtHook},
+		{0, 0, "_aligned_offset_recalloc",_aligned_offset_recalloc_ucrtHook},
+		{0, 0, "_aligned_realloc",	_aligned_realloc_ucrtHook},
+		{0, 0, "_aligned_recalloc",	_aligned_recalloc_ucrtHook}};
 
 	if( totalMethods ) {
 		if( !init ) {
 			HookApiIndex index = 0;
 			HMODULE kernel32 = GetModuleHandle(_T("kernel32.dll"));
 			HMODULE msvcrt = GetModuleHandle(_T("msvcrt.dll"));
+			static UniStrConst name = {L"ucrtbase.dll", sizeof(L"ucrtbase.dll")-sizeof(uni_char)};
+			HMODULE ucrtbase = 0;
+			OsModuleData mod = {0};
 
 			C_ASSERT( sizeof(m)/sizeof(m[0]) == iMax );
 
@@ -946,12 +1323,26 @@ extern Method * GetMonitorMethods(__out_opt unsigned long * totalMethods)
 				return (Method *)0;
 			}
 
-			C_ASSERT( sizeof(m)/sizeof(m[0]) == iMax );
+			if( OsModuleInfoFromName(&name, &mod) ) {
+				ucrtbase = (HMODULE)mod.base;
+				OsFreeModuleData(&mod);
+			}
+
+			LOG_INFO("msvcrt.dll at %p", msvcrt);
+			LOG_INFO("ucrtbase.dll at %p", ucrtbase);
+
 			while( index < iMax ) {
 				if( index < iMaxKernel32 )
 					m[index].osapi = GetProcAddress(kernel32, m[index].apiname);
-				else if( UPTR(msvcrt) )
-					m[index].osapi = GetProcAddress(msvcrt, m[index].apiname);
+				else if( index < iMaxMsvcrt ) {
+					if( UPTR(msvcrt) )
+						m[index].osapi = GetProcAddress(msvcrt, m[index].apiname);
+				} else if( index < iMax ) {
+					if( UPTR(ucrtbase) ) {
+						m[index].osapi = GetProcAddress(ucrtbase, m[index].apiname);
+						LOG_INFO("ucrtbase.dll: %s() %p", m[index].apiname, m[index].osapi);
+					}
+				}
 				index++;
 			}
 			init = TRUE;

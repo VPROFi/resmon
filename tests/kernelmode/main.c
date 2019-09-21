@@ -81,6 +81,8 @@ DriverEntry(
 	OBJECT_ATTRIBUTES oa = {0};
 	IO_STATUS_BLOCK  isb = {0};
 	PKEVENT event = 0;
+	static UniStrConst name = {L"ntoskrnl.exe", sizeof(L"ntoskrnl.exe")-sizeof(uni_char)};
+	OsModuleData mod = {0};
 
 	ASSERT( drvObject != 0 && regPath != 0 );
 	LOG_INFO(": ************************************ ");
@@ -88,6 +90,11 @@ DriverEntry(
 	LOG_INFO(": Built on "__DATE__" at "__TIME__"");
 	LOG_INFO(": ************************************ ");
 	drvObject->DriverUnload = resmonDriverUnload;
+
+	if( OsModuleInfoFromName(&name, &mod) ) {
+		LOG_INFO("kernel base %p", mod.base);
+		OsFreeModuleData(&mod);
+	}
 
 	InstallResMonitoringSystem(0, MON_DEFAULT_LIMITS);
 
